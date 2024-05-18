@@ -1,0 +1,30 @@
+#!/bin/bash
+
+SERVER1="ldap://replica1.example.com"
+SERVER2="ldap://replica2.example.com"
+
+BIND_DN="cn=admin"
+BIND_PW="MySecret"
+
+BASE_DN="dc=example,dc=com"
+
+ENTRIES1="$(ldapsearch -LLL -H "${SERVER1}" -D "${BIND_DN}" -w "${BIND_PW}" -b "${BASE_DN}" objectClass=* dn | grep dn | sed 's/^dn: //' | sort)"
+ENTRIES2="$(ldapsearch -LLL -H "${SERVER2}" -D "${BIND_DN}" -w "${BIND_PW}" -b "${BASE_DN}" objectClass=* dn | grep dn | sed 's/^dn: //' | sort)"
+
+comm -3 <(echo "${ENTRIES1}") <(echo "${ENTRIES2}")
+
+ENTRIES_TO_COMPARE="$(comm -12 <(echo "${ENTRIES1}") <(echo "${ENTRIES2}"))"
+
+IFS=$'\n'
+for E in ${ENTRIES_TO_COMPARE}; do
+    ENTRY1="$(ldapsearch -LLL -H "${SERVER1}" -D "${BIND_DN}" -w "${BIND_PW}" -b "${E}" -s base "objectClass=*" "*" "+" | grep -v "^dn: " | sort)"
+    ENTRY2="$(ldapsearch -LLL -H "${SERVER2}" -D "${BIND_DN}" -w "${BIND_PW}" -b "${E}" -s base "objectClass=*" "*" "+" | grep -v "^dn: " | sort)"
+
+    RESULT="$(comm -3 <(echo "${ENTRY1}") <(echo "${ENTRY2}"))"
+
+    if [[ "$(echo "${RESULT}" | wc -l)" -gt 1 ]]; then
+        echo "dn: ${E}"
+	echo "${RESULT}"
+	echo ""
+    fi
+done
